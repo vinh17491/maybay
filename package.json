@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "eslint",
     "dataset:download": "tsx src/scripts/dataset-download.ts",
     "dataset:import": "tsx src/scripts/dataset-import.ts",
