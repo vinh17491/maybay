@@ -1,5 +1,6 @@
 "use client";
 
+// Re-triggering Vercel build
 import { useSearchParams } from "next/navigation";
 import { trpc } from "@/components/providers/trpc-provider";
 import { FlightCard } from "@/features/flights/components/flight-card";
