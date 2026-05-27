@@ -104,16 +104,33 @@ export class MockProvider implements FlightProvider {
     if (dbRoutes.length > 0) {
       const offers: FlightOffer[] = dbRoutes.map((route, index) => ({
         id: `db-offer-${route.id}-${index}`,
-        airline: { code: route.airline.code || "", name: route.airline.name },
         price: { amount: 100 + Math.floor(Math.random() * 500), currency: "USD" },
         cabinClass: input.cabinClass,
         availableSeats: 15,
+        isRefundable: true,
+        baggageAllowance: "23kg",
         segments: [
           {
             id: `seg-${route.id}`,
-            departure: { airport: route.sourceAirport.code || "", time: new Date(input.departureDate.getTime() + (2 + index) * 60 * 60 * 1000) },
-            arrival: { airport: route.destinationAirport.code || "", time: new Date(input.departureDate.getTime() + (4 + index) * 60 * 60 * 1000) },
+            departureAirport: {
+              code: route.sourceAirport.code || "",
+              name: route.sourceAirport.name || "",
+              city: route.sourceAirport.city || "",
+              country: route.sourceAirport.country || "",
+            },
+            arrivalAirport: {
+              code: route.destinationAirport.code || "",
+              name: route.destinationAirport.name || "",
+              city: route.destinationAirport.city || "",
+              country: route.destinationAirport.country || "",
+            },
+            departureTime: new Date(input.departureDate.getTime() + (2 + index) * 60 * 60 * 1000),
+            arrivalTime: new Date(input.departureDate.getTime() + (4 + index) * 60 * 60 * 1000),
             duration: 120,
+            airline: {
+              code: route.airline.code || "",
+              name: route.airline.name || "",
+            },
             flightNumber: `${route.airline.code}${100 + index}`,
             aircraft: route.equipment?.split(' ')[0] || "Boeing 737",
           }
@@ -126,16 +143,30 @@ export class MockProvider implements FlightProvider {
     const offers: FlightOffer[] = [
       {
         id: "mock-offer-1",
-        airline: { code: "VN", name: "Vietnam Airlines" },
         price: { amount: 150, currency: "USD" },
         cabinClass: input.cabinClass,
         availableSeats: 10,
+        isRefundable: true,
+        baggageAllowance: "23kg",
         segments: [
           {
             id: "seg-1",
-            departure: { airport: input.origin, time: new Date(input.departureDate.getTime() + 2 * 60 * 60 * 1000) },
-            arrival: { airport: input.destination, time: new Date(input.departureDate.getTime() + 4 * 60 * 60 * 1000) },
+            departureAirport: {
+              code: input.origin,
+              name: "Tan Son Nhat",
+              city: "Ho Chi Minh City",
+              country: "Vietnam",
+            },
+            arrivalAirport: {
+              code: input.destination,
+              name: "Noi Bai",
+              city: "Hanoi",
+              country: "Vietnam",
+            },
+            departureTime: new Date(input.departureDate.getTime() + 2 * 60 * 60 * 1000),
+            arrivalTime: new Date(input.departureDate.getTime() + 4 * 60 * 60 * 1000),
             duration: 120,
+            airline: { code: "VN", name: "Vietnam Airlines" },
             flightNumber: "VN123",
             aircraft: "Airbus A350",
           }
@@ -143,16 +174,30 @@ export class MockProvider implements FlightProvider {
       },
       {
         id: "mock-offer-2",
-        airline: { code: "VJ", name: "VietJet Air" },
         price: { amount: 80, currency: "USD" },
         cabinClass: input.cabinClass,
         availableSeats: 25,
+        isRefundable: false,
+        baggageAllowance: "7kg",
         segments: [
           {
             id: "seg-2",
-            departure: { airport: input.origin, time: new Date(input.departureDate.getTime() + 5 * 60 * 60 * 1000) },
-            arrival: { airport: input.destination, time: new Date(input.departureDate.getTime() + 7 * 60 * 60 * 1000) },
+            departureAirport: {
+              code: input.origin,
+              name: "Tan Son Nhat",
+              city: "Ho Chi Minh City",
+              country: "Vietnam",
+            },
+            arrivalAirport: {
+              code: input.destination,
+              name: "Noi Bai",
+              city: "Hanoi",
+              country: "Vietnam",
+            },
+            departureTime: new Date(input.departureDate.getTime() + 5 * 60 * 60 * 1000),
+            arrivalTime: new Date(input.departureDate.getTime() + 7 * 60 * 60 * 1000),
             duration: 120,
+            airline: { code: "VJ", name: "VietJet Air" },
             flightNumber: "VJ456",
             aircraft: "Airbus A321",
           }
@@ -166,16 +211,30 @@ export class MockProvider implements FlightProvider {
   async getFlightOffer(id: string): Promise<FlightOffer> {
     return {
       id,
-      airline: { code: "VN", name: "Vietnam Airlines" },
       price: { amount: 150, currency: "USD" },
       cabinClass: "ECONOMY" as CabinClass,
       availableSeats: 10,
+      isRefundable: true,
+      baggageAllowance: "23kg",
       segments: [
         {
           id: "seg-1",
-          departure: { airport: "SGN", time: new Date() },
-          arrival: { airport: "HAN", time: new Date() },
+          departureAirport: {
+            code: "SGN",
+            name: "Tan Son Nhat",
+            city: "Ho Chi Minh City",
+            country: "Vietnam",
+          },
+          arrivalAirport: {
+            code: "HAN",
+            name: "Noi Bai",
+            city: "Hanoi",
+            country: "Vietnam",
+          },
+          departureTime: new Date(),
+          arrivalTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
           duration: 120,
+          airline: { code: "VN", name: "Vietnam Airlines" },
           flightNumber: "VN123",
           aircraft: "Airbus A350",
         }
@@ -188,7 +247,7 @@ export class MockProvider implements FlightProvider {
     return { offer, rules: "Non-refundable, 20kg baggage included." };
   }
 
-  async checkAvailability(input: FlightAvailabilityInput): Promise<FlightAvailabilityResult> {
+  async checkAvailability(_input: FlightAvailabilityInput): Promise<FlightAvailabilityResult> {
     return { isAvailable: true, remainingSeats: 5 };
   }
 

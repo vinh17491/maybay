@@ -5,7 +5,7 @@ import { CabinClass } from "@prisma/client";
 import { redis } from "@/lib/redis";
 import { SearchHistoryService } from "@/services/search-history.service";
 
-const CACHE_TTL = 3600; // 1 hour
+const CACHE_TTL = 600; // 10 minutes (Amadeus recommendations for price stability)
 
 export const flightRouter = createTRPCRouter({
   searchAirports: publicProcedure
@@ -33,22 +33,31 @@ export const flightRouter = createTRPCRouter({
       
       // Try to get from cache
       try {
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-          return JSON.parse(cached);
+        if (redis) {
+          const cached = await redis.get(cacheKey);
+          if (cached) {
+            return JSON.parse(cached);
+          }
         }
       } catch (e) {
-        console.error("Redis error:", e);
+        console.error("Redis cache get error:", e);
       }
 
       const provider = FlightProviderFactory.getProvider();
       const results = await provider.searchFlights(input);
 
-      // Save to cache
+      // Save to cache and store individual offers for booking flow
       try {
-        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(results));
+        if (redis) {
+          await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(results));
+          
+          // Store individual offers to be retrieved by offerId during booking
+          for (const offer of results.offers) {
+            await redis.setex(`offer:${offer.id}`, CACHE_TTL, JSON.stringify(offer));
+          }
+        }
       } catch (e) {
-        console.error("Redis error:", e);
+        console.error("Redis cache set error:", e);
       }
 
       // Save to search history if user is logged in

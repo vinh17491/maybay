@@ -1,15 +1,17 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
-import { FlightProviderFactory } from "@/server/providers/flight/provider.factory";
 import { prisma } from "@/lib/prisma";
-import { BookingStatus, CabinClass, PaymentStatus } from "@prisma/client";
+import { BookingStatus, CabinClass, PaymentStatus, FlightStatus } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { TicketService } from "@/services/ticket.service";
 import { EmailService } from "@/services/email.service";
+import { redis } from "@/lib/redis";
+import { FlightProviderFactory } from "@/server/providers/flight/provider.factory";
+import { FlightOffer } from "@/types/flight";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-04-10" as any,
+  apiVersion: "2026-04-22.dahlia", // Using the required version for this Stripe SDK
 });
 
 export const bookingRouter = createTRPCRouter({
@@ -29,34 +31,158 @@ export const bookingRouter = createTRPCRouter({
       })),
     }))
     .mutation(async ({ input, ctx }) => {
-      const provider = FlightProviderFactory.getProvider();
-      
-      // In a real Amadeus flow, we'd need the full offer JSON.
-      // For the sake of completing the audit, we'll try to find or simulate a real flight linkage.
-      // We look for an existing flight in DB or create one to avoid "placeholder-flight-id".
-      let flight = await prisma.flight.findFirst({
-        include: { airline: true }
-      });
+      let offer: FlightOffer | null = null;
 
-      if (!flight) {
-        // Fallback for demo/test: ensure we have at least one flight in DB
+      // 1. Try to get offer from Redis
+      try {
+        if (redis) {
+          const cached = await redis.get(`offer:${input.offerId}`);
+          if (cached) {
+            offer = JSON.parse(cached);
+          }
+        }
+      } catch (e) {
+        console.error("Redis error in createBooking:", e);
+      }
+
+      // 2. If not in cache, try to fetch from provider
+      if (!offer) {
+        try {
+          const provider = FlightProviderFactory.getProvider();
+          offer = await provider.getFlightOffer(input.offerId);
+        } catch (e) {
+          console.error("Provider error in createBooking:", e);
+        }
+      }
+
+      if (!offer) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "No flights available in database to link booking."
+          code: "NOT_FOUND",
+          message: "Flight offer not found or expired. Please search again.",
         });
       }
 
-      const totalPrice = 100 * input.passengers.length; // Simplified for demo if offer fetch fails
+      // Calculate total price - assuming offer price is per person if passengers were not provided to search
+      // In this specific implementation, let's treat it as the total price for the offer.
+      const totalPrice = offer.price.amount; 
 
+      // 3. Sync offer to Database (Airline, Flight, Segments, Inventory)
+      // This ensures we have a real record for the booking
       const booking = await prisma.$transaction(async (tx) => {
+        // Find or create airline
+        const firstSegment = offer!.segments[0];
+        const airline = await tx.airline.upsert({
+          where: { code: firstSegment.airline.code },
+          update: { name: firstSegment.airline.name, logoUrl: firstSegment.airline.logoUrl },
+          create: {
+            code: firstSegment.airline.code,
+            name: firstSegment.airline.name,
+            logoUrl: firstSegment.airline.logoUrl,
+          },
+        });
+
+        // Find or create aircraft (simplified for demo)
+        const aircraft = await tx.aircraft.upsert({
+          where: { registration: firstSegment.aircraft || "D-DEFAULT" },
+          update: {},
+          create: {
+            registration: firstSegment.aircraft || "D-DEFAULT",
+            model: "Airbus A320", // Default model
+            airlineId: airline.id,
+          },
+        });
+
+        // Create Flight
+        const flight = await tx.flight.create({
+          data: {
+            airlineId: airline.id,
+            aircraftId: aircraft.id,
+            flightNumber: firstSegment.flightNumber,
+            status: FlightStatus.SCHEDULED,
+            segments: {
+              create: offer!.segments.map((seg, index) => ({
+                departureAirport: {
+                  connectOrCreate: {
+                    where: { code: seg.departureAirport.code },
+                    create: {
+                      code: seg.departureAirport.code,
+                      name: seg.departureAirport.name,
+                      city: seg.departureAirport.city,
+                      country: seg.departureAirport.country,
+                    },
+                  },
+                },
+                arrivalAirport: {
+                  connectOrCreate: {
+                    where: { code: seg.arrivalAirport.code },
+                    create: {
+                      code: seg.arrivalAirport.code,
+                      name: seg.arrivalAirport.name,
+                      city: seg.arrivalAirport.city,
+                      country: seg.arrivalAirport.country,
+                    },
+                  },
+                },
+                departureTime: new Date(seg.departureTime),
+                arrivalTime: new Date(seg.arrivalTime),
+                duration: seg.duration,
+                sequence: index,
+              })),
+            },
+            inventory: {
+              create: {
+                class: offer!.cabinClass as CabinClass,
+                totalSeats: 100,
+                availableSeats: 100,
+              },
+            },
+            prices: {
+              create: {
+                class: offer!.cabinClass as CabinClass,
+                price: offer!.price.amount,
+                currency: offer!.price.currency,
+              },
+            },
+          },
+        });
+
+        // 4. Check and decrement inventory
+        const passengerCountByClass = input.passengers.reduce((acc, p) => {
+          acc[p.cabinClass] = (acc[p.cabinClass] || 0) + 1;
+          return acc;
+        }, {} as Record<CabinClass, number>);
+
+        for (const [cabinClass, count] of Object.entries(passengerCountByClass)) {
+          const inventory = await tx.flightInventory.findUnique({
+            where: {
+              flightId_class: {
+                flightId: flight.id,
+                class: cabinClass as CabinClass,
+              },
+            },
+          });
+
+          if (!inventory || inventory.availableSeats < count) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Not enough seats available in ${cabinClass} class.`,
+            });
+          }
+
+          await tx.flightInventory.update({
+            where: { id: inventory.id },
+            data: { availableSeats: { decrement: count } },
+          });
+        }
+
         const booking = await tx.booking.create({
           data: {
             userId: ctx.session.user.id,
-            flightId: flight!.id, 
+            flightId: flight.id, 
             bookingCode: Math.random().toString(36).substring(2, 10).toUpperCase(),
             status: BookingStatus.PENDING_PAYMENT,
             totalPrice: totalPrice,
-            currency: "USD",
+            currency: offer!.price.currency,
             passengers: {
               create: input.passengers.map(p => ({
                 ...p,
@@ -74,7 +200,7 @@ export const bookingRouter = createTRPCRouter({
         line_items: [
           {
             price_data: {
-              currency: "usd",
+              currency: booking.currency.toLowerCase(),
               product_data: {
                 name: `Flight Booking ${booking.bookingCode}`,
               },
@@ -99,60 +225,13 @@ export const bookingRouter = createTRPCRouter({
 
   verifyPayment: protectedProcedure
     .input(z.object({ bookingId: z.string(), sessionId: z.string() }))
-    .mutation(async ({ input, ctx }) => {
-      const session = await stripe.checkout.sessions.retrieve(input.sessionId);
-      
-      if (session.payment_status !== "paid") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Payment not completed" });
-      }
-
+    .query(async ({ input, ctx }) => {
+      // This is now just a status check. 
+      // The authoritative update happens in the Stripe Webhook.
       const booking = await prisma.booking.findUnique({
         where: { id: input.bookingId },
-        include: { passengers: true }
-      });
-
-      if (!booking || booking.userId !== ctx.session.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      if (booking.status === BookingStatus.PAID || booking.status === BookingStatus.TICKETED) {
-        return booking;
-      }
-
-      const updatedBooking = await prisma.$transaction(async (tx) => {
-        // Update booking status
-        const updated = await tx.booking.update({
-          where: { id: input.bookingId },
-          data: { status: BookingStatus.PAID },
-        });
-
-        // Record payment
-        await tx.payment.create({
-          data: {
-            bookingId: booking.id,
-            amount: booking.totalPrice,
-            currency: booking.currency,
-            status: PaymentStatus.COMPLETED,
-            provider: "STRIPE",
-            transactionId: session.id,
-          }
-        });
-
-        return updated;
-      });
-
-      // Trigger ticketing in background or separate step
-      return updatedBooking;
-    }),
-
-  confirmBooking: protectedProcedure
-    .input(z.object({ bookingId: z.string() }))
-    .mutation(async ({ input, ctx }) => {
-      const booking = await prisma.booking.findUnique({
-        where: { id: input.bookingId },
-        include: {
-          user: true,
-          passengers: true,
+        include: { 
+          passengers: { include: { ticket: true } },
           flight: {
             include: {
               airline: true,
@@ -167,79 +246,15 @@ export const bookingRouter = createTRPCRouter({
         }
       });
 
-      if (!booking) throw new TRPCError({ code: "NOT_FOUND" });
-      if (booking.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      if (booking.status !== BookingStatus.PAID) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Booking must be paid before ticketing" });
+      if (!booking || booking.userId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      const updatedBooking = await prisma.$transaction(async (tx) => {
-        const updated = await tx.booking.update({
-          where: { id: input.bookingId },
-          data: { status: BookingStatus.TICKETED },
-          include: {
-            user: true,
-            passengers: true,
-            flight: {
-              include: {
-                airline: true,
-                segments: {
-                  include: {
-                    departureAirport: true,
-                    arrivalAirport: true,
-                  }
-                }
-              }
-            }
-          }
-        });
-
-        for (const passenger of updated.passengers) {
-          await tx.ticket.create({
-            data: {
-              bookingId: updated.id,
-              passengerId: passenger.id,
-              ticketNumber: `TK-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-              status: "ISSUED",
-              issuedAt: new Date(),
-            }
-          });
-        }
-
-        return tx.booking.findUnique({
-          where: { id: updated.id },
-          include: {
-            user: {
-              include: {
-                profile: true
-              }
-            },
-            passengers: {
-              include: {
-                ticket: true
-              }
-            },
-            flight: {
-              include: {
-                airline: true,
-                segments: {
-                  include: {
-                    departureAirport: true,
-                    arrivalAirport: true,
-                  }
-                }
-              }
-            }
-          }
-        });
-      });
-
-      if (updatedBooking && updatedBooking.user) {
-        const pdfBuffer = await TicketService.generateTicketPDF(updatedBooking as any);
-        await EmailService.sendBookingConfirmation(updatedBooking.user.email, updatedBooking as any, pdfBuffer);
-      }
-
-      return updatedBooking;
+      return {
+        status: booking.status,
+        isPaid: booking.status === BookingStatus.PAID || booking.status === BookingStatus.TICKETED,
+        booking
+      };
     }),
 
   getUserBookings: protectedProcedure
@@ -250,6 +265,12 @@ export const bookingRouter = createTRPCRouter({
           flight: {
             include: {
               airline: true,
+              segments: {
+                include: {
+                  departureAirport: true,
+                  arrivalAirport: true,
+                }
+              }
             }
           },
           passengers: true,
@@ -289,7 +310,7 @@ export const bookingRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      if (booking.userId !== ctx.session.user.id && !(ctx.session.user as any).roles.includes("ADMIN")) {
+      if (booking.userId !== ctx.session.user.id && !ctx.session.user.roles.includes("ADMIN")) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 

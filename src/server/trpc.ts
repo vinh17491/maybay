@@ -31,19 +31,26 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
 });
 
 export const createTRPCRouter = t.router;
-export const publicProcedure = t.procedure.use(async ({ ctx, next, path }) => {
-  // Global rate limit for all public procedures
+const rateLimitMiddleware = t.middleware(async ({ ctx, next }) => {
   const ip = ctx.ip || "unknown";
-  await RateLimiter.check({
-    key: `ratelimit:public:${ip}`,
-    limit: 100, // 100 requests
-    window: 60, // per minute
-  });
+  const userId = ctx.session?.user?.id;
   
+  // Rate limit key depends on user or IP
+  const key = userId ? `ratelimit:user:${userId}` : `ratelimit:ip:${ip}`;
+  const limit = userId ? 200 : 100; // Logged in users get more quota
+
+  await RateLimiter.check({
+    key,
+    limit,
+    window: 60,
+  });
+
   return next();
 });
 
-export const protectedProcedure = t.procedure.use(async ({ ctx, next, path }) => {
+export const publicProcedure = t.procedure.use(rateLimitMiddleware);
+
+export const protectedProcedure = t.procedure.use(rateLimitMiddleware).use(async ({ ctx, next }) => {
   if (!ctx.session || !ctx.session.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
@@ -56,7 +63,7 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next, path }) =>
 });
 
 export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const roles = (ctx.session.user as any).roles || [];
+  const roles = ctx.session.user.roles || [];
   if (!roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }

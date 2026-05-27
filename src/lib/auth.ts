@@ -1,9 +1,22 @@
-import NextAuth from "next-auth";
+import NextAuth, { type DefaultSession } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import * as argon2 from "argon2";
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      roles: string[];
+    } & DefaultSession["user"];
+  }
+
+  interface User {
+    roles?: string[];
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -34,7 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               id: user.id,
               email: user.email,
               name: user.email,
-              roles: user.roles.map((ur: any) => ur.role.name),
+              roles: user.roles.map((ur) => ur.role.name),
             };
           }
         }
@@ -47,14 +60,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.roles = (user as any).roles;
+        token.roles = user.roles;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token.id) {
+      if (token.id && session.user) {
         session.user.id = token.id as string;
-        (session.user as any).roles = token.roles;
+        session.user.roles = (token.roles as string[]) || [];
       }
       return session;
     },

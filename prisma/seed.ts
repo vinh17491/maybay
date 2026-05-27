@@ -1,4 +1,4 @@
-import { PrismaClient, CabinClass, FlightStatus, BookingStatus, DiscountType, TicketStatus, Priority } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -125,7 +125,7 @@ async function main() {
   const superAdminRole = await prisma.role.findUnique({ where: { name: "SUPER_ADMIN" } });
   
   if (superAdminRole) {
-    const adminUser = await prisma.user.upsert({
+    await prisma.user.upsert({
       where: { email: adminEmail },
       update: {},
       create: {

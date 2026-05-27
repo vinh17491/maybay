@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { AmadeusProvider } from "./amadeus.provider";
 
 describe("AmadeusProvider", () => {
@@ -11,13 +11,13 @@ describe("AmadeusProvider", () => {
 
   it("should authenticate and search airports", async () => {
     // Mock Auth Token
-    (fetch as any).mockResolvedValueOnce({
+    (fetch as Mock).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ access_token: "test_token", expires_in: 3600 }),
     });
 
     // Mock Airport Search
-    (fetch as any).mockResolvedValueOnce({
+    (fetch as Mock).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({
         data: [

@@ -68,7 +68,7 @@ async function importAirports() {
       });
       count++;
       if (count % 500 === 0) console.log(`Imported ${count} airports...`);
-    } catch (e) {
+    } catch {
       // Skip duplicates or errors
     }
   }
@@ -112,7 +112,7 @@ async function importAirlines() {
       });
       count++;
       if (count % 500 === 0) console.log(`Imported ${count} airlines...`);
-    } catch (e) {
+    } catch {
       // Skip
     }
   }
@@ -160,7 +160,7 @@ async function importRoutes() {
         count++;
         if (count % 1000 === 0) console.log(`Imported ${count} routes...`);
       }
-    } catch (e) {
+    } catch {
       // Skip
     }
   }

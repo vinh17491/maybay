@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 export const SearchHistoryService = {
-  async save(userId: string, query: any) {
+  async save(userId: string, query: Record<string, unknown>) {
     return await prisma.searchHistory.create({
       data: {
         userId,

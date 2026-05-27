@@ -1,6 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { MockProvider } from "./mock.provider";
 import { CabinClass } from "@prisma/client";
+
+vi.mock("../../../lib/prisma", () => ({
+  prisma: {
+    airport: { findMany: vi.fn().mockResolvedValue([]) },
+    airline: { findMany: vi.fn().mockResolvedValue([]) },
+    route: { findMany: vi.fn().mockResolvedValue([]) },
+  },
+}));
 
 describe("MockProvider", () => {
   const provider = new MockProvider();
@@ -16,8 +24,8 @@ describe("MockProvider", () => {
 
     expect(flights.offers).toBeDefined();
     expect(flights.offers.length).toBeGreaterThan(0);
-    expect(flights.offers[0].segments[0].departure.airport).toBe("HAN");
-    expect(flights.offers[0].segments[0].arrival.airport).toBe("SGN");
+    expect(flights.offers[0].segments[0].departureAirport.code).toBe("HAN");
+    expect(flights.offers[0].segments[0].arrivalAirport.code).toBe("SGN");
   });
 
   it("should return airport search results", async () => {

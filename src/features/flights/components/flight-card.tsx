@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plane, Clock, Luggage, Info } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface FlightCardProps {
   offer: FlightOffer;
@@ -14,8 +14,8 @@ export function FlightCard({ offer, onSelect }: FlightCardProps) {
   const firstSegment = offer.segments[0];
   const lastSegment = offer.segments[offer.segments.length - 1];
   
-  const departureTime = firstSegment.departure.time;
-  const arrivalTime = lastSegment.arrival.time;
+  const departureTime = firstSegment.departureTime;
+  const arrivalTime = lastSegment.arrivalTime;
   
   const totalDuration = offer.segments.reduce((acc, segment) => acc + segment.duration, 0);
   const hours = Math.floor(totalDuration / 60);
@@ -23,27 +23,36 @@ export function FlightCard({ offer, onSelect }: FlightCardProps) {
 
   const stops = offer.segments.length - 1;
 
+  // Use the airline of the first segment for primary display
+  const primaryAirline = firstSegment.airline;
+
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow">
       <CardContent className="p-6">
         <div className="flex flex-col md:flex-row md:items-center gap-6">
           {/* Airline Info */}
           <div className="flex items-center gap-3 md:w-40 shrink-0">
-            {offer.airline.logoUrl ? (
-              <img src={offer.airline.logoUrl} alt={offer.airline.name} className="h-8 w-8 object-contain" />
+            {primaryAirline.logoUrl ? (
+              <Image 
+                src={primaryAirline.logoUrl} 
+                alt={primaryAirline.name} 
+                width={32} 
+                height={32} 
+                className="object-contain" 
+              />
             ) : (
               <div className="h-8 w-8 bg-muted flex items-center justify-center rounded">
                 <Plane className="h-4 w-4" />
               </div>
             )}
-            <span className="font-medium text-sm">{offer.airline.name}</span>
+            <span className="font-medium text-sm">{primaryAirline.name}</span>
           </div>
 
           {/* Flight Path */}
           <div className="flex-1 flex items-center justify-between gap-4">
             <div className="text-center md:text-left">
-              <div className="text-xl font-bold">{format(departureTime, "HH:mm")}</div>
-              <div className="text-sm text-muted-foreground">{firstSegment.departure.airport}</div>
+              <div className="text-xl font-bold">{format(new Date(departureTime), "HH:mm")}</div>
+              <div className="text-sm text-muted-foreground">{firstSegment.departureAirport.code}</div>
             </div>
 
             <div className="flex-1 flex flex-col items-center max-w-[200px]">
@@ -65,8 +74,8 @@ export function FlightCard({ offer, onSelect }: FlightCardProps) {
             </div>
 
             <div className="text-center md:text-right">
-              <div className="text-xl font-bold">{format(arrivalTime, "HH:mm")}</div>
-              <div className="text-sm text-muted-foreground">{lastSegment.arrival.airport}</div>
+              <div className="text-xl font-bold">{format(new Date(arrivalTime), "HH:mm")}</div>
+              <div className="text-sm text-muted-foreground">{lastSegment.arrivalAirport.code}</div>
             </div>
           </div>
 

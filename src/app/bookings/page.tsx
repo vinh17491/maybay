@@ -1,12 +1,13 @@
 "use client";
 
 import { trpc } from "@/components/providers/trpc-provider";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Plane, Calendar, MapPin, ArrowRight, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function MyBookingsPage() {
   const { data: bookings, isLoading } = trpc.booking.getUserBookings.useQuery();
@@ -34,7 +35,7 @@ export default function MyBookingsPage() {
           <CardContent>
             <Plane className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">No bookings found</h2>
-            <p className="text-muted-foreground mb-6">You haven't made any bookings yet.</p>
+            <p className="text-muted-foreground mb-6">You haven{"'"}t made any bookings yet.</p>
             <Button asChild variant="outline">
               <Link href="/">Start Searching</Link>
             </Button>
@@ -49,10 +50,12 @@ export default function MyBookingsPage() {
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
                       {booking.flight.airline.logoUrl && (
-                        <img 
+                        <Image 
                           src={booking.flight.airline.logoUrl} 
                           alt={booking.flight.airline.name} 
-                          className="h-6 w-6 object-contain" 
+                          width={24}
+                          height={24}
+                          className="object-contain" 
                         />
                       )}
                       <span className="font-semibold">{booking.flight.airline.name}</span>
@@ -74,10 +77,10 @@ export default function MyBookingsPage() {
                         Departure
                       </p>
                       <p className="font-bold">
-                        {(booking.flight as any).segments?.[0] ? format(new Date((booking.flight as any).segments[0].departureTime), "MMM d, HH:mm") : "---"}
+                        {booking.flight.segments?.[0] ? format(new Date(booking.flight.segments[0].departureTime), "MMM d, HH:mm") : "---"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(booking.flight as any).segments?.[0]?.departureAirport?.city || "---"}
+                        {booking.flight.segments?.[0]?.departureAirport?.city || "---"}
                       </p>
                     </div>
 
@@ -91,12 +94,14 @@ export default function MyBookingsPage() {
                         <MapPin className="h-3 w-3" />
                       </p>
                       <p className="font-bold">
-                        {(booking.flight as any).segments?.[(booking.flight as any).segments.length - 1] 
-                          ? format(new Date((booking.flight as any).segments[(booking.flight as any).segments.length - 1].arrivalTime), "MMM d, HH:mm") 
+                        {booking.flight.segments && booking.flight.segments.length > 0
+                          ? format(new Date(booking.flight.segments[booking.flight.segments.length - 1].arrivalTime), "MMM d, HH:mm") 
                           : "---"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(booking.flight as any).segments?.[(booking.flight as any).segments.length - 1]?.arrivalAirport?.city || "---"}
+                        {booking.flight.segments && booking.flight.segments.length > 0
+                          ? booking.flight.segments[booking.flight.segments.length - 1].arrivalAirport?.city 
+                          : "---"}
                       </p>
                     </div>
                   </div>

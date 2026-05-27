@@ -57,7 +57,7 @@ export class AmadeusProvider implements FlightProvider {
     return this.accessToken!;
   }
 
-  private async fetchAmadeus(endpoint: string, params: Record<string, string> = {}, method = "GET", body?: any) {
+  private async fetchAmadeus(endpoint: string, params: Record<string, string> = {}, method = "GET", body?: unknown) {
     const token = await this.getAuthToken();
     const url = new URL(`${this.baseUrl}${endpoint}`);
     if (method === "GET") {
@@ -90,7 +90,16 @@ export class AmadeusProvider implements FlightProvider {
       view: "LIGHT",
     });
 
-    return data.data.map((item: any) => ({
+    interface AmadeusLocation {
+      iataCode: string;
+      name: string;
+      address: {
+        cityName: string;
+        countryName: string;
+      };
+    }
+
+    return (data.data as AmadeusLocation[]).map((item) => ({
       code: item.iataCode,
       name: item.name,
       city: item.address.cityName,
@@ -103,7 +112,12 @@ export class AmadeusProvider implements FlightProvider {
       airlineCodes: input.query,
     });
 
-    return data.data.map((item: any) => ({
+    interface AmadeusAirline {
+      iataCode: string;
+      commonName: string;
+    }
+
+    return (data.data as AmadeusAirline[]).map((item) => ({
       code: item.iataCode,
       name: item.commonName,
     }));
@@ -129,11 +143,11 @@ export class AmadeusProvider implements FlightProvider {
     const data = await this.fetchAmadeus("/v2/shopping/flight-offers", params);
 
     return {
-      offers: data.data.map((offer: any) => this.mapAmadeusOffer(offer)),
+      offers: (data.data as Array<Parameters<typeof this.mapAmadeusOffer>[0]>).map((offer) => this.mapAmadeusOffer(offer)),
     };
   }
 
-  async getFlightOffer(id: string): Promise<FlightOffer> {
+  async getFlightOffer(_: string): Promise<FlightOffer> {
     // Note: Amadeus flight-offers/pricing is used to get updated price and details for a specific offer
     // In a real flow, we'd store the offer object in cache (Redis) and retrieve it here by ID
     // Since we don't have persistence for offers in this provider yet, we'll throw if not found or implement a basic fetch
@@ -142,7 +156,7 @@ export class AmadeusProvider implements FlightProvider {
     throw new Error("getFlightOffer requires specific offer data for Amadeus. Use pricing API instead.");
   }
 
-  async priceFlightOffer(input: FlightPricingInput): Promise<FlightPricingResult> {
+  async priceFlightOffer(_: FlightPricingInput): Promise<FlightPricingResult> {
     // In a real app, you'd retrieve the original offer from Redis/DB by input.offerId
     // For this audit, we'll assume the input.offerId is something we can use.
     // We need the full offer JSON to call Amadeus Pricing.
@@ -190,27 +204,66 @@ export class AmadeusProvider implements FlightProvider {
     };
   }
 
-  private mapAmadeusOffer(offer: any): FlightOffer {
+  private mapAmadeusOffer(offer: {
+    id: string;
+    itineraries: Array<{
+      segments: Array<unknown>;
+    }>;
+    price: {
+      total: string;
+      currency: string;
+    };
+    travelerPricings: Array<{
+      fareDetailsBySegment: Array<{
+        cabin: string;
+      }>;
+    }>;
+    numberOfBookableSeats: number;
+  }): FlightOffer {
+    interface AmadeusSegment {
+      id: string;
+      carrierCode: string;
+      number: string;
+      departure: {
+        iataCode: string;
+        at: string;
+      };
+      arrival: {
+        iataCode: string;
+        at: string;
+      };
+      duration: string;
+      aircraft: {
+        code: string;
+      };
+    }
+
     const firstItinerary = offer.itineraries[0];
-    const firstSegment = firstItinerary.segments[0];
+    const firstSegment = firstItinerary.segments[0] as AmadeusSegment;
     
     return {
       id: offer.id,
-      airline: {
-        code: firstSegment.carrierCode,
-        name: firstSegment.carrierCode, // Real name needs another lookup or inclusion in dictionaries
-      },
-      segments: firstItinerary.segments.map((seg: any) => ({
+      segments: (firstItinerary.segments as AmadeusSegment[]).map((seg) => ({
         id: seg.id,
-        departure: {
-          airport: seg.departure.iataCode,
-          time: new Date(seg.departure.at),
+        departureAirport: {
+          code: seg.departure.iataCode,
+          name: seg.departure.iataCode,
+          city: seg.departure.iataCode,
+          country: "",
         },
-        arrival: {
-          airport: seg.arrival.iataCode,
-          time: new Date(seg.arrival.at),
+        arrivalAirport: {
+          code: seg.arrival.iataCode,
+          name: seg.arrival.iataCode,
+          city: seg.arrival.iataCode,
+          country: "",
         },
+        departureTime: new Date(seg.departure.at),
+        arrivalTime: new Date(seg.arrival.at),
         duration: this.parseISODuration(seg.duration),
+        airline: {
+          code: seg.carrierCode,
+          name: seg.carrierCode,
+        },
         flightNumber: `${seg.carrierCode}${seg.number}`,
         aircraft: seg.aircraft.code,
       })),
@@ -220,6 +273,8 @@ export class AmadeusProvider implements FlightProvider {
       },
       cabinClass: this.mapAmadeusCabinClass(offer.travelerPricings[0].fareDetailsBySegment[0].cabin),
       availableSeats: offer.numberOfBookableSeats,
+      isRefundable: true,
+      baggageAllowance: "23kg",
     };
   }
 

@@ -19,7 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CalendarIcon, MapPin, Users, PlaneTakeoff, PlaneLanding } from "lucide-react";
+import { CalendarIcon, Users, PlaneTakeoff, PlaneLanding } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -71,7 +71,7 @@ export function SearchForm() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={tripType} onValueChange={(v) => setTripType(v as any)} className="w-full">
+      <Tabs value={tripType} onValueChange={(v) => setTripType(v as typeof tripType)} className="w-full">
         <TabsList className="grid w-fit grid-cols-3">
           <TabsTrigger value="round-trip">Round-trip</TabsTrigger>
           <TabsTrigger value="one-way">One-way</TabsTrigger>
@@ -86,7 +86,7 @@ export function SearchForm() {
             <FormField
               control={form.control}
               name="origin"
-              render={({ field }: { field: any }) => (
+              render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>From</FormLabel>
                   <FormControl>
@@ -104,7 +104,7 @@ export function SearchForm() {
             <FormField
               control={form.control}
               name="destination"
-              render={({ field }: { field: any }) => (
+              render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>To</FormLabel>
                   <FormControl>
@@ -122,7 +122,7 @@ export function SearchForm() {
             <FormField
               control={form.control}
               name="departureDate"
-              render={({ field }: { field: any }) => (
+              render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>Departure</FormLabel>
                   <Popover>
@@ -165,7 +165,7 @@ export function SearchForm() {
               <FormField
                 control={form.control}
                 name="returnDate"
-                render={({ field }: { field: any }) => (
+                render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Return</FormLabel>
                     <Popover>
@@ -211,13 +211,20 @@ export function SearchForm() {
               <FormField
                 control={form.control}
                 name="passengers"
-                render={({ field }: { field: any }) => (
+                render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Passengers</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Users className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input type="number" min={1} max={9} className="pl-10 w-24" {...field} onChange={(e: any) => field.onChange(parseInt(e.target.value))} />
+                        <Input 
+                          type="number" 
+                          min={1} 
+                          max={9} 
+                          className="pl-10 w-24" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseInt(e.target.value))} 
+                        />
                       </div>
                     </FormControl>
                     <FormMessage />

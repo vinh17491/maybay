@@ -1,25 +1,16 @@
-import { CabinClass } from "@prisma/client";
+import { CabinClass, Airport, Airline, FlightSegment, FlightOffer } from "@/types/flight";
 
 export interface AirportSearchInput {
   query: string;
 }
 
-export interface AirportSearchResult {
-  code: string;
-  name: string;
-  city: string;
-  country: string;
-}
+export interface AirportSearchResult extends Airport {}
 
 export interface AirlineSearchInput {
   query: string;
 }
 
-export interface AirlineSearchResult {
-  code: string;
-  name: string;
-  logoUrl?: string;
-}
+export interface AirlineSearchResult extends Airline {}
 
 export interface FlightSearchInput {
   origin: string;
@@ -36,33 +27,6 @@ export interface FlightSearchInput {
 
 export interface FlightSearchResult {
   offers: FlightOffer[];
-}
-
-export interface FlightOffer {
-  id: string;
-  airline: AirlineSearchResult;
-  segments: FlightSegmentDTO[];
-  price: {
-    amount: number;
-    currency: string;
-  };
-  cabinClass: CabinClass;
-  availableSeats: number;
-}
-
-export interface FlightSegmentDTO {
-  id: string;
-  departure: {
-    airport: string;
-    time: Date;
-  };
-  arrival: {
-    airport: string;
-    time: Date;
-  };
-  duration: number;
-  flightNumber: string;
-  aircraft: string;
 }
 
 export interface FlightPricingInput {
@@ -103,3 +67,5 @@ export interface FlightProvider {
   checkAvailability(input: FlightAvailabilityInput): Promise<FlightAvailabilityResult>;
   getFlightStatus(input: FlightStatusInput): Promise<FlightStatusResult>;
 }
+
+export { type FlightOffer, type FlightSegment };

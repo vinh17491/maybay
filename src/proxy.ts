@@ -2,18 +2,10 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      email: string;
-      roles: string[];
-    };
-  }
-}
+// next-auth declarations are already in src/lib/auth.ts
 
 export async function proxy(request: NextRequest) {
-  const session = await auth() as any;
+  const session = await auth();
   const { nextUrl } = request;
 
   const isAdminRoute = nextUrl.pathname.startsWith("/admin");

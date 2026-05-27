@@ -18,7 +18,7 @@ export class FlightProviderFactory {
   }
 
   static getDefaultProvider(): FlightProvider {
-    const providerType = (process.env.FLIGHT_PROVIDER as any) || "mock";
+    const providerType = (process.env.FLIGHT_PROVIDER as "amadeus" | "aviationstack" | "mock") || "mock";
     return this.getProvider(providerType);
   }
 }

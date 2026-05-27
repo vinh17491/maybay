@@ -18,8 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CabinClass } from "@prisma/client";
-import { Loader2, Plus, Trash2, Plane } from "lucide-react";
-import { FlightCard } from "@/features/flights/components/flight-card";
+import { Loader2, Plus, Trash2, Plane, Info } from "lucide-react";
+import Image from "next/image";
 
 const passengerSchema = z.object({
   firstName: z.string().min(2, "First name is required"),
@@ -41,8 +41,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
   const router = useRouter();
 
   // Fetch the offer details to show a summary
-  const { data: offer, isLoading: isLoadingOffer } = trpc.flight.getFlightDetails.useQuery(
-    { offerId },
+  const { data: offer, isLoading: isOfferLoading } = trpc.flight.getFlightDetails.useQuery(
+    { offerId }, 
     { enabled: !!offerId }
   );
 
@@ -84,8 +84,29 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
     });
   }
 
+  if (isOfferLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading flight details...</p>
+      </div>
+    );
+  }
+
+  if (!offer) {
+    return (
+      <div className="container py-20 text-center">
+        <h1 className="text-2xl font-bold mb-2">Offer Not Found</h1>
+        <p className="text-muted-foreground mb-8">The flight offer may have expired. Please search again.</p>
+        <Button onClick={() => router.push("/")}>Back to Search</Button>
+      </div>
+    );
+  }
+
+  const totalPrice = offer.price.amount * fields.length;
+
   return (
-    <div className="container py-10 max-w-4xl">
+    <div className="container py-10 max-w-5xl">
       <h1 className="text-3xl font-bold mb-8">Checkout</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -166,10 +187,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
                       control={form.control}
                       name={`passengers.${index}.nationality`}
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="md:col-span-2">
                           <FormLabel>Nationality</FormLabel>
                           <FormControl>
-                            <Input placeholder="USA" {...field} />
+                            <Input placeholder="Vietnam" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -179,11 +200,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
                 </Card>
               ))}
 
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() =>
                     append({
                       firstName: "",
@@ -191,7 +211,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
                       email: "",
                       passportNumber: "",
                       nationality: "",
-                      cabinClass: CabinClass.ECONOMY,
+                      cabinClass: offer.cabinClass as CabinClass,
                     })
                   }
                 >
@@ -199,11 +219,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
                   Add Passenger
                 </Button>
 
-                <Button type="submit" size="lg" disabled={createBooking.isPending}>
+                <Button type="submit" size="lg" disabled={createBooking.isPending} className="w-full sm:w-auto">
                   {createBooking.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Continue to Payment
+                  Pay {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: offer.price.currency,
+                  }).format(totalPrice)}
                 </Button>
               </div>
             </form>
@@ -213,30 +236,76 @@ export default function CheckoutPage({ params }: { params: Promise<{ offerId: st
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Price Summary</CardTitle>
+              <CardTitle className="text-xl">Flight Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between text-sm">
-                <span>Passengers (x{fields.length})</span>
-                <span className="font-medium">$---.--</span>
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-3">
+                {offer.segments[0].airline.logoUrl && (
+                  <Image 
+                    src={offer.segments[0].airline.logoUrl} 
+                    alt={offer.segments[0].airline.name} 
+                    width={32} 
+                    height={32} 
+                    className="object-contain" 
+                  />
+                )}
+                <div>
+                  <div className="font-bold">{offer.segments[0].airline.name}</div>
+                  <div className="text-xs text-muted-foreground">Flight {offer.segments[0].flightNumber}</div>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>Taxes & Fees</span>
-                <span className="font-medium">$0.00</span>
+
+              <div className="grid grid-cols-3 items-center gap-2">
+                <div className="text-center">
+                  <div className="font-bold">{offer.segments[0].departureAirport.code}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{offer.segments[0].departureAirport.city}</div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <Plane className="h-4 w-4 text-muted-foreground rotate-90" />
+                  <div className="h-[1px] bg-border w-full" />
+                </div>
+                <div className="text-center">
+                  <div className="font-bold">{offer.segments[offer.segments.length - 1].arrivalAirport.code}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{offer.segments[offer.segments.length - 1].arrivalAirport.city}</div>
+                </div>
               </div>
-              <div className="border-t pt-4 flex justify-between font-bold text-lg">
-                <span>Total</span>
-                <span>$---.--</span>
+
+              <div className="pt-4 border-t space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Class</span>
+                  <span className="font-medium">{offer.cabinClass}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Passengers</span>
+                  <span className="font-medium">x{fields.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Price per person</span>
+                  <span className="font-medium">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: offer.price.currency,
+                    }).format(offer.price.amount)}
+                  </span>
+                </div>
+                <div className="pt-4 border-t flex justify-between font-bold text-lg">
+                  <span>Total</span>
+                  <span className="text-primary">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: offer.price.currency,
+                    }).format(totalPrice)}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
           
-          <div className="p-4 bg-muted rounded-lg flex items-start gap-3">
-            <Plane className="h-5 w-5 mt-0.5 text-primary" />
-            <div>
-              <p className="text-sm font-medium">Selected Flight</p>
-              <p className="text-xs text-muted-foreground">ID: {offerId}</p>
-            </div>
+          <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg flex items-start gap-3">
+            <Info className="h-5 w-5 mt-0.5 text-blue-600" />
+            <p className="text-xs text-blue-800 dark:text-blue-200">
+              Payment is processed securely via Stripe. Your seats are held temporarily during checkout.
+            </p>
           </div>
         </div>
       </div>

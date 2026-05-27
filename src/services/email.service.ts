@@ -10,7 +10,7 @@ export class EmailService {
     },
   });
 
-  static async sendBookingConfirmation(to: string, booking: any, pdfBuffer: Buffer) {
+  static async sendBookingConfirmation(to: string, booking: { id: string }, pdfBuffer: Buffer) {
     const mailOptions = {
       from: '"SkyBooking" <noreply@skybooking.com>',
       to,

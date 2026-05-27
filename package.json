@@ -8,6 +8,7 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "dataset:download": "tsx src/scripts/dataset-download.ts",
     "dataset:import": "tsx src/scripts/dataset-import.ts",
     "dataset:verify": "tsx src/scripts/dataset-verify.ts",

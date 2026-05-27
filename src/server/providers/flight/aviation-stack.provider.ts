@@ -28,7 +28,7 @@ export class AviationStackProvider implements FlightProvider {
     this.apiKey = process.env.AVIATION_STACK_API_KEY || "";
   }
 
-  async searchFlights(input: FlightSearchInput): Promise<FlightSearchResult> {
+  async searchFlights(_: FlightSearchInput): Promise<FlightSearchResult> {
     // AviationStack doesn't provide price-based flight offers in the same way as Amadeus.
     console.warn("AviationStackProvider: searchFlights not fully implemented for booking offers.");
     return {
@@ -36,15 +36,15 @@ export class AviationStackProvider implements FlightProvider {
     };
   }
 
-  async getFlightOffer(id: string): Promise<FlightOffer> {
+  async getFlightOffer(_: string): Promise<FlightOffer> {
     throw new Error("Method not implemented.");
   }
 
-  async priceFlightOffer(input: FlightPricingInput): Promise<FlightPricingResult> {
+  async priceFlightOffer(_: FlightPricingInput): Promise<FlightPricingResult> {
     throw new Error("Method not implemented.");
   }
 
-  async checkAvailability(input: FlightAvailabilityInput): Promise<FlightAvailabilityResult> {
+  async checkAvailability(_: FlightAvailabilityInput): Promise<FlightAvailabilityResult> {
     throw new Error("Method not implemented.");
   }
 
@@ -57,7 +57,12 @@ export class AviationStackProvider implements FlightProvider {
     const response = await fetch(`${this.baseUrl}/airlines?${params.toString()}`);
     const data = await response.json();
 
-    return (data.data || []).map((airline: any) => ({
+    interface AviationStackAirline {
+      iata_code: string;
+      airline_name: string;
+    }
+
+    return (data.data as AviationStackAirline[] || []).map((airline) => ({
       code: airline.iata_code,
       name: airline.airline_name,
     }));
@@ -72,11 +77,21 @@ export class AviationStackProvider implements FlightProvider {
     const response = await fetch(`${this.baseUrl}/flights?${params.toString()}`);
     const data = await response.json();
 
+    interface AviationStackFlight {
+      flight_status: string;
+      departure: {
+        scheduled: string;
+      };
+      arrival: {
+        scheduled: string;
+      };
+    }
+
     if (!data.data || data.data.length === 0) {
       throw new Error("Flight status not found");
     }
 
-    const flight = data.data[0];
+    const flight = data.data[0] as AviationStackFlight;
     return {
       status: flight.flight_status.toUpperCase(),
       departure: new Date(flight.departure.scheduled),
@@ -93,7 +108,14 @@ export class AviationStackProvider implements FlightProvider {
     const response = await fetch(`${this.baseUrl}/airports?${params.toString()}`);
     const data = await response.json();
 
-    return (data.data || []).map((airport: any) => ({
+    interface AviationStackAirport {
+      iata_code: string;
+      airport_name: string;
+      city_iata_code: string;
+      country_name: string;
+    }
+
+    return (data.data as AviationStackAirport[] || []).map((airport) => ({
       code: airport.iata_code,
       name: airport.airport_name,
       city: airport.city_iata_code,
